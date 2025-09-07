@@ -16,7 +16,7 @@ Key questions addressed:
 🛠 **Tech Stack**  
 - **Data & Storage:** Synthetic subscription dataset (200,000 customers, Oct–Dec 2024)  
 - **Analysis/Modeling:** R (Logistic Regression, Random Forest, LightGBM)  
-- **Visualization:** ggplot2, Quarto, Poster PDF  
+- **Visualization:** Poster PDF  
 - **Validation:** 10-fold cross-validation, ROC analysis  
 
 ---
