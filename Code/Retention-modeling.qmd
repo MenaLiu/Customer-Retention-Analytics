@@ -1,0 +1,729 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: setup
+#| echo: false
+#| results: hide
+#| message: false
+#| warning: false
+
+packages_needed <-  c(
+  "GGally",
+  'tidymodels',
+  "themis", # recipe steps for unbalanced data
+  "kknn", # k nearest neighbour
+  "rpart",  # decision trees
+  "rpart.plot", # plotting decision trees
+  "baguette", 
+  "yardstick",
+  "ranger", # random forests
+  "xgboost", # xgboost
+  "discrim", # naive bayes
+  "klaR", # naive bayes
+  "lightgbm", "bonsai", # lightgbm
+  "parallel", "future",
+  "patchwork"# use multiple cores
+)
+packages_to_install <- packages_needed[!packages_needed %in% installed.packages()]
+sapply(packages_to_install, install.packages, dependencies=TRUE, repos="https://cloud.r-project.org")
+sapply(packages_needed, require, character=TRUE)
+
+tidymodels_prefer()
+
+# Set options
+name_of_this_file <- "week08_cellphone_churn"  
+figprefix = paste('Rfigs/', paste0(name_of_this_file, "_"), sep="")
+
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  message = FALSE,
+  warning = FALSE,
+  fig.path=figprefix,
+  fig.align='center',
+  fig.show='hold',
+  size='footnotesize', 
+  fig.width=8, fig.height=4.5, 
+  out.width="60%"
+)
+opt_width = 70 
+options(width = opt_width,  
+        pillar.print_min = 6,
+        pillar.print_max = 10
+)
+
+cores <- parallel::detectCores(logical = TRUE)
+plan(multisession) # parallel processing
+
+```
+
+# Model comparasion
+
+```{r}
+set.seed(234)
+ted_poppy_data <- 
+  read.csv("data/tedpoppydata_final.csv") 
+
+ted_poppy_data <- ted_poppy_data %>%
+  mutate(
+    retained_binary = factor(retained_binary,  levels=c( 0,1), 
+                             labels = c("yes", "no")), 
+    days_since_last_web_purchase = as.numeric(gsub("[^0-9]", "", days_since_last_web_purchase)), 
+    last_purchase_date = as.numeric(Sys.Date() - days_since_last_web_purchase),  
+    avg_purchase_value = as.numeric(gsub("\\$", "", avg_purchase_value)),  
+    opened_last_email = as.numeric(opened_last_email),  
+    discounted_rate = as.numeric(discounted_rate),  
+    subscription_payment_problem_last6Months = as.numeric(as.factor(subscription_payment_problem_last6Months))  
+  )|> 
+  
+  select(retained_binary,
+age, 
+gender,
+support_ticket, 
+satisfaction_survey, 
+community_posts_made, 
+community_topics_made,
+community_profile_photo,
+community_follows,
+community_followers,
+last_login_device,
+last_browser, 
+subscription_frequency,
+dog_stage_puppy,
+app_visits,
+website_visits,
+opened_last_email,
+discounted_rate,
+payment_type,
+subscription_payment_problem_last6Months,
+count_dogs,        
+num_purchases,      
+avg_purchase_value,
+days_since_last_web_purchase,
+made_instore_purchase) |>  
+  
+  filter(!is.na(retained_binary)) |>
+  mutate_if(is.character, as.factor) |> 
+  slice_sample(n = 10000) 
+
+
+glimpse(ted_poppy_data)
+
+```
+
+```{r}
+ted_poppy_data |> 
+  count(retained_binary) |> 
+  mutate(prop = n/sum(n))
+```
+
+```{r}
+ted_poppy_data |>
+  mutate_if(is.character, as.factor) |> 
+  select_if(~ is.numeric(.) | is.factor(.))
+  
+```
+
+```{r}
+set.seed(222)
+data_split <- initial_split(ted_poppy_data, prop = 0.75, strata = retained_binary)
+train_data <- training(data_split)
+test_data  <- testing(data_split)
+
+# Cross-validation
+set.seed(987)
+cv_folds <- vfold_cv(train_data, v = 10, strata = retained_binary)
+
+```
+
+```{r}
+data_recipe <- 
+  # create recipe and specify formula
+  recipe(retained_binary ~ ., data = train_data)  |>  
+  step_naomit(all_predictors()) %>% 
+    step_zv(all_predictors()) |> 
+  step_normalize(all_numeric_predictors()) %>%  
+  step_dummy(all_nominal_predictors()) %>% 
+
+  step_upsample(retained_binary, over_ratio = 1)
+```
+
+```{r}
+glimpse(train_data)
+data_recipe |> 
+  prep() |> 
+  bake(train_data) 
+```
+
+```{r}
+lr_model <- 
+  logistic_reg() |> 
+  set_engine("glm")
+
+lr_wflow <- workflow() |> 
+                  add_model(lr_model) |> 
+                  add_recipe(data_recipe)
+lr_wflow
+```
+
+```{r}
+knn_model <-
+  nearest_neighbor(neighbors = 4) |>
+  set_engine('kknn') |>
+  set_mode('classification')
+
+
+knn_wflow <- workflow() |> 
+                  add_model(knn_model) |> 
+                  add_recipe(data_recipe)
+```
+
+```{r}
+rf_model <- 
+  rand_forest(trees = 1000) |> 
+  set_engine("ranger", 
+             importance = "impurity"  #optional - provide info about variable importance
+        ) |> 
+  set_mode("classification")
+
+rf_wflow <-   workflow() |> 
+  add_model(rf_model) |> 
+  add_recipe(data_recipe)
+```
+
+```{r}
+xgb_model <- 
+  boost_tree() |>
+  set_engine("xgboost" ) |>
+  set_mode("classification") 
+
+xgb_wflow <- 
+  workflow() |> 
+  add_model(xgb_model) |> 
+  add_recipe(data_recipe)
+```
+
+```{r}
+lgbm_model <- 
+  boost_tree() |>
+  set_engine("lightgbm" ) |>
+  set_mode("classification") 
+
+lgbm_wflow <- 
+  workflow() |> 
+  add_model(lgbm_model) |> 
+  add_recipe(data_recipe)
+```
+
+```{r}
+data_metrics <- metric_set(accuracy, roc_auc, sensitivity, specificity, bal_accuracy, ppv, npv
+                              ## other metrics are possible, e.g. 
+                              #, f_meas, kap, recall, precision
+                              )
+
+```
+
+```{r}
+Sys.time()
+
+lr_res <- lr_wflow |>
+  fit_resamples(
+     resamples = cv_folds, 
+     metrics = data_metrics,
+     control = control_grid(save_pred = TRUE,
+                            parallel_over = "everything")
+    ) 
+
+Sys.time()  
+
+```
+
+```{r}
+Sys.time()
+
+knn_res <- knn_wflow |>
+  fit_resamples(
+     resamples = cv_folds, 
+     metrics = data_metrics,
+     control = control_grid(save_pred = TRUE,
+                            parallel_over = "everything")
+    ) 
+Sys.time()
+
+rf_res <- rf_wflow |>
+  fit_resamples(
+     resamples = cv_folds, 
+     metrics = data_metrics,
+     control = control_grid(save_pred = TRUE,
+                            parallel_over = "everything")
+    ) 
+
+Sys.time()
+xgb_res <- xgb_wflow |>
+  fit_resamples(
+     resamples = cv_folds, 
+     metrics = data_metrics,
+     control = control_grid(save_pred = TRUE,
+                            parallel_over = "everything")
+    ) 
+
+
+Sys.time()
+
+
+lgbm_res <- lgbm_wflow |>
+  fit_resamples(
+     resamples = cv_folds, 
+     metrics = data_metrics,
+     control = control_grid(save_pred = TRUE,
+                            parallel_over = "everything")
+    ) 
+
+
+Sys.time()
+```
+
+```{r}
+lr_res |> collect_metrics(summarize = FALSE)
+
+```
+
+```{r}
+lr_res |> collect_metrics(summarize = FALSE)
+
+```
+
+```{r}
+lr_pred <- 
+  lr_res |>
+  collect_predictions()
+
+```
+
+```{r}
+lr_pred |>
+  conf_mat(truth = retained_binary, .pred_class) 
+
+```
+
+```{r}
+lr_pred |>
+  group_by(id) |># id contains our folds
+  roc_curve(retained_binary, .pred_yes) |>
+  autoplot()
+```
+
+```{r}
+#individudal results
+knn_res  |> collect_metrics(summarize = TRUE)
+rf_res   |> collect_metrics(summarize = TRUE)
+xgb_res  |> collect_metrics(summarize = TRUE)
+lgbm_res |> collect_metrics(summarize = TRUE)
+
+```
+
+```{r}
+all_res <- 
+bind_rows(
+lr_res   |> collect_metrics(summarize = TRUE) |> mutate(model = "Logistic Regression"),
+knn_res  |> collect_metrics(summarize = TRUE) |> mutate(model = "KNN"),
+rf_res   |> collect_metrics(summarize = TRUE) |> mutate(model = "Random Forest"),
+xgb_res  |> collect_metrics(summarize = TRUE) |> mutate(model = "XGBoost"),
+lgbm_res |> collect_metrics(summarize = TRUE) |> mutate(model = "LightGBM")
+)
+
+# Combine predictions
+all_pred <- 
+bind_rows(
+lr_res   |> collect_predictions()  |> mutate(model = "Logistic Regression"),
+knn_res  |> collect_predictions()  |> mutate(model = "KNN"),
+rf_res   |> collect_predictions()  |> mutate(model = "Random Forest"),
+xgb_res  |> collect_predictions()  |> mutate(model = "XGBoost"),
+lgbm_res |> collect_predictions()  |> mutate(model = "LightGBM")
+  )
+```
+
+```{r}
+all_pred |> 
+  group_by(id, model) |>  # id contains our folds
+  roc_curve(retained_binary, .pred_yes) |> 
+  autoplot(aes(col = model)) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey") +
+  facet_wrap(vars(model)) +
+  theme(
+    legend.position = "none",
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(title = "ROC by fold for selected algorithms")
+print(all_pred)
+
+```
+
+```{r}
+all_res |> 
+  ggplot() + 
+  geom_col(aes(y = reorder(model, desc(model)), x = mean, fill = model)) +
+  facet_wrap(facets = vars(.metric), ncol = 2) +
+  labs(y = "model") + 
+  xlim(0,1)+
+  theme(panel.border = element_rect(colour = "black", fill=NA, linewidth=1))+
+  theme(legend.position = "none") 
+
+```
+
+```{r}
+all_res |> filter(.metric == "specificity") 
+
+```
+
+#\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+#Logistic Regression
+
+```{r}
+final_wflow <-   lr_wflow 
+```
+
+```{r}
+final_fit <- 
+  final_wflow |>
+  last_fit(data_split,
+               metrics = data_metrics)
+
+```
+
+```{r}
+final_res <- final_fit |>  collect_metrics()
+final_res
+```
+
+```{r}
+final_pred <- final_fit |>
+  collect_predictions() 
+
+final_pred |> 
+  roc_curve(truth = retained_binary, .pred_yes) |> 
+  autoplot()
+```
+
+```{r}
+final_conf <- final_pred |>
+  conf_mat(truth = retained_binary, .pred_class) 
+final_conf
+```
+
+```{r}
+summary(final_conf) |> print(n = 13)
+```
+
+```{r}
+library(vip)
+final_fit |>
+  pluck(".workflow", 1) |>  
+  pull_workflow_fit() |>
+  vip(num_features = 6
+      )
+```
+
+#\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+#LightGBM
+
+```{r}
+final_wflow2 <-   lgbm_wflow 
+```
+
+```{r}
+final_fit2 <- 
+  final_wflow2 |>
+  last_fit(data_split,
+               metrics = data_metrics)
+
+```
+
+```{r}
+final_res2 <- final_fit2 |>  collect_metrics()
+final_res2
+```
+
+#\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+#Random Forest
+
+```{r}
+final_wflow3 <-   rf_wflow 
+```
+
+```{r}
+final_fit3 <- 
+  final_wflow3 |>
+  last_fit(data_split,
+               metrics = data_metrics)
+
+```
+
+```{r}
+final_res3 <- final_fit3 |>  collect_metrics()
+final_res3
+```
+
+#\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+# 200k Model-Logistic Regression
+
+```{r}
+set.seed(234)
+ted_poppy_data1 <- read.csv("data/tedpoppydata_final.csv") 
+
+ted_poppy_data1 <- ted_poppy_data1 %>%
+  mutate(
+    retained_binary = factor(retained_binary, levels = c(0, 1), labels = c("yes", "no")), 
+    days_since_last_web_purchase = as.numeric(gsub("[^0-9]", "", days_since_last_web_purchase)), 
+    last_purchase_date = as.numeric(Sys.Date() - days_since_last_web_purchase),  
+    avg_purchase_value = as.numeric(gsub("\\$", "", avg_purchase_value)),  
+    opened_last_email = as.numeric(opened_last_email),  
+    discounted_rate = as.numeric(discounted_rate),  
+    subscription_payment_problem_last6Months = as.numeric(as.factor(subscription_payment_problem_last6Months))
+  ) |> 
+  select(retained_binary,
+         age, 
+         gender,
+         support_ticket, 
+         satisfaction_survey, 
+         community_posts_made, 
+         community_topics_made,
+         community_profile_photo,
+         community_follows,
+         community_followers,
+         last_login_device,
+         last_browser, 
+         subscription_frequency,
+         dog_stage_puppy,
+         app_visits,
+         website_visits,
+         opened_last_email,
+         discounted_rate,
+         payment_type,
+         subscription_payment_problem_last6Months,
+         count_dogs,        
+         num_purchases,      
+         avg_purchase_value,
+         days_since_last_web_purchase,
+         made_instore_purchase) |>  
+  filter(!is.na(retained_binary)) |>
+  mutate_if(is.character, as.factor)
+
+glimpse(ted_poppy_data1)
+
+```
+
+```{r}
+ted_poppy_data1 %>%
+  ggplot(aes(x = days_since_last_web_purchase, y = retained_binary, fill = retained_binary)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 16, outlier.size = 2) +
+  labs(x = "Retained Binary", 
+       y = "Age") +
+  theme_minimal()
+```
+
+```{r}
+library(dplyr)
+
+ted_poppy_data1 %>%
+  group_by(retained_binary) %>%
+  summarise(
+    mean_age = mean(days_since_last_web_purchase, na.rm = TRUE),
+    median_age = median(days_since_last_web_purchase, na.rm = TRUE),
+    lower_q = quantile(days_since_last_web_purchase, 0.25, na.rm = TRUE),
+    upper_q = quantile(days_since_last_web_purchase, 0.75, na.rm = TRUE),
+    min_age = min(days_since_last_web_purchase, na.rm = TRUE),
+    max_age = max(days_since_last_web_purchase, na.rm = TRUE)
+  )
+```
+
+```{r}
+# Check distribution of the target variable
+ted_poppy_data1 |> 
+  count(retained_binary) |> 
+  mutate(prop = n/sum(n))
+# Optional: Select only numeric and factor predictors
+ted_poppy_data1 |>
+  mutate_if(is.character, as.factor) |> 
+  select_if(~ is.numeric(.) | is.factor(.))
+```
+
+```{r}
+ted_poppy_data1 |>
+  mutate_if(is.character, as.factor) |> 
+  select_if(~ is.numeric(.) | is.factor(.))
+  
+```
+
+```{r}
+set.seed(222)
+data_split1 <- initial_split(ted_poppy_data1, prop = 0.75, strata = retained_binary)
+train_data1 <- training(data_split1)
+test_data1  <- testing(data_split1)
+
+# Cross-validation folds
+set.seed(987)
+cv_folds <- vfold_cv(train_data1, v = 10, strata = retained_binary)
+```
+
+```{r}
+data_recipe1 <- recipe(retained_binary ~ ., data = train_data1) |>  
+  step_naomit(all_predictors()) %>% 
+  step_zv(all_predictors()) |> 
+  step_normalize(all_numeric_predictors()) %>%  
+  step_dummy(all_nominal_predictors()) %>% 
+  step_upsample(retained_binary, over_ratio = 1)
+```
+
+```{r}
+glimpse(train_data1)
+data_recipe1 |> 
+  prep() |> 
+  bake(train_data1)
+```
+
+```{r}
+lr_model1 <- logistic_reg() |> set_engine("glm")
+
+lr_wflow1 <- workflow() |> 
+  add_model(lr_model1) |> 
+  add_recipe(data_recipe1)
+lr_wflow1
+```
+
+```{r}
+# Define metrics
+data_metrics <- metric_set(accuracy, roc_auc, sensitivity, specificity, bal_accuracy, ppv, npv)
+
+```
+
+```{r}
+Sys.time()
+lr_res <- lr_wflow1 |> 
+  fit_resamples(
+    resamples = cv_folds, 
+    metrics = data_metrics,
+    control = control_grid(save_pred = TRUE, parallel_over = "everything")
+  ) 
+Sys.time()
+```
+
+```{r}
+lr_res |> collect_metrics(summarize = FALSE)
+lr_pred <- lr_res |> collect_predictions()
+
+```
+
+```{r}
+lr_pred |>
+  group_by(id) |>  # 'id' contains our folds
+  roc_curve(retained_binary, .pred_yes) |> 
+  autoplot()
+```
+
+```{r}
+final_wflow1 <- lr_wflow1 
+
+final_fit1 <- final_wflow1 |>
+  last_fit(data_split1, metrics = data_metrics)
+
+final_res1 <- final_fit1 |> collect_metrics()
+final_res1
+
+final_pred1 <- final_fit1 |> collect_predictions() 
+
+final_pred1 |> 
+  roc_curve(truth = retained_binary, .pred_yes) |> 
+  autoplot()
+```
+
+```{r}
+final_conf1 <- final_pred1 |>
+  conf_mat(truth = retained_binary, .pred_class) 
+final_conf1
+
+summary(final_conf1) |> print(n = 13)
+```
+
+```{r}
+library(vip)
+final_fit1 |>
+  pluck(".workflow", 1) |>  
+  pull_workflow_fit() |>
+  vip(num_features = 6)
+
+final_fit1 |>
+extract_fit_parsnip() |>
+tidy()
+```
+
+```{r}
+churn_support <- ted_poppy_data1 %>%
+  group_by(support_ticket) %>%
+  summarise(
+    churn_count = sum(retained_binary == "no"),
+    total_count = n(),
+    churn_rate = churn_count / total_count * 100
+  )
+churn_support
+```
+
+```{r}
+retain_support <- ted_poppy_data1 %>%
+  group_by(support_ticket) %>%
+  summarise(
+    retain_count = sum(retained_binary == "no"),
+    total_count = n(),
+    retain_rate = retain_count / total_count * 100
+  )
+retain_support
+```
+
+```{r}
+retain_broswer <- ted_poppy_data1 %>%
+  group_by(last_browser) %>%
+  summarise(
+    retain_count = sum(retained_binary == "no"),
+    total_count = n(),
+    retain_rate = retain_count / total_count * 100
+  )
+retain_broswer
+```
+
+```{r}
+retain_discount <- ted_poppy_data1 %>%
+  group_by(discounted_rate) %>%
+  summarise(
+    retain_count = sum(retained_binary == "no"),
+    total_count = n(),
+    retain_rate = retain_count / total_count * 100
+  )
+retain_discount
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+churn_by_days <- ted_poppy_data1 %>%
+  mutate(days_group = cut(days_since_last_web_purchase,
+                          breaks = c(0, 7, 14, 30, 60, 90, Inf),
+                          labels = c("0-7", "8-14", "15-30", "31-60", "61-90", "90+"))) %>%
+  group_by(days_group) %>%
+  summarise(
+    churn_count = sum(retained_binary == "yes"),  
+    total_count = n(),  
+    churn_rate = (churn_count / total_count) * 100  
+  ) %>%
+  arrange(desc(churn_rate)) 
+
+print(churn_by_days)
+```
