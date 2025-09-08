@@ -1,13 +1,23 @@
 ---
-title: "Untitled"
-format: html
+title: "Customer Retention Modeling"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: false
+    code-fold: true
 editor: visual
+params:
+  use_zip: true                      
+  zip_path: "../Dataset/tedpoppydata_final.zip"
+  csv_inside_zip: "tedpoppydata_final.csv"
+  csv_path: "../Dataset/tedpoppydata_final.csv"
 ---
 
 ```{r}
+## 1. Setup
 #| label: setup
-#| echo: false
-#| results: hide
+#| include: false
 #| message: false
 #| warning: false
 
@@ -60,8 +70,8 @@ plan(multisession) # parallel processing
 
 ```
 
-# Model comparasion
-
+## 2. Quick Model Comparison (10k sample)
+### 2.1 Load & Prepare Sample
 ```{r}
 set.seed(234)
 ted_poppy_data <- 
@@ -727,3 +737,4 @@ churn_by_days <- ted_poppy_data1 %>%
 
 print(churn_by_days)
 ```
+
