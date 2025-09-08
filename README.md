@@ -54,3 +54,10 @@ The full analysis is implemented in Quarto:
 
 - [`Code/Retention-modeling.qmd`](Code/Retention-modeling.qmd)  
   Contains data preparation and model training, evaluation.
+  
+---
+
+**Results Poster**
+📄 See the full poster summarizing the findings:  
+[View Poster (PDF)](Customer-Retention-Poster.pdf)
+
