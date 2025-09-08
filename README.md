@@ -52,5 +52,5 @@ Key questions addressed:
 **Code**  
 The full analysis is implemented in Quarto:
 
-- [`code/Retention-modeling.qmd`](code/Retention-modeling.qmd)  
+- [`Code/Retention-modeling.qmd`](Code/Retention-modeling.qmd)  
   Contains data preparation and model training, evaluation.
