@@ -49,14 +49,8 @@ Key questions addressed:
 
 ---
 
-## Code
+**Code**  
 The full analysis is implemented in Quarto:
 
-- [`code/churn-analysis.qmd`](code/churn-analysis.qmd)  
-  Contains data preparation, model training, evaluation, and business recommendations.
-
-To render:
-
-```bash
-quarto render code/churn-analysis.qmd --to html --output-dir reports
-
+- [`code/Retention-modeling.qmd`](code/Retention-modeling.qmd)  
+  Contains data preparation and model training, evaluation.
