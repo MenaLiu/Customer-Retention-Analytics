@@ -14,8 +14,8 @@ params:
   csv_path: "../Dataset/tedpoppydata_final.csv"
 ---
 
-```{r}
 ## 1. Setup
+```{r}
 #| label: setup
 #| include: false
 #| message: false
@@ -72,6 +72,7 @@ plan(multisession) # parallel processing
 
 ## 2. Quick Model Comparison (10k sample)
 ### 2.1 Load & Prepare Sample
+### 2.2 Split, Recipe & CV
 ```{r}
 set.seed(234)
 ted_poppy_data <- 
@@ -137,6 +138,7 @@ ted_poppy_data |>
   
 ```
 
+### 2.3 Models (LR / KNN / RF / XGB / LGBM)
 ```{r}
 set.seed(222)
 data_split <- initial_split(ted_poppy_data, prop = 0.75, strata = retained_binary)
@@ -149,6 +151,11 @@ cv_folds <- vfold_cv(train_data, v = 10, strata = retained_binary)
 
 ```
 
+## 3. Final Logistic Regression on Full Data (200k)
+### 3.1 Load & Prepare Full Data
+### 3.2 Train/Test Split & Recipe
+### 3.3 Last Fit, ROC & Confusion Matrix
+### 3.4 VIP / Coefficients & Interpretation
 ```{r}
 data_recipe <- 
   # create recipe and specify formula
@@ -737,4 +744,5 @@ churn_by_days <- ted_poppy_data1 %>%
 
 print(churn_by_days)
 ```
+
 
