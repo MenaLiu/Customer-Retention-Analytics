@@ -1,5 +1,5 @@
 # Customer-Retention-Analytics
-A business analytics case study applying logistic regression and machine learning to improve subscription retention.  
+This is a business analytics case study that applies logistic regression and machine learning to improve subscription retention.  
 
 📌 **Problem Statement**  
 Ted & Poppy, a subscription-based pet food company, faced a **15.8% churn rate in Q4 2024**.  
