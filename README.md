@@ -1,7 +1,7 @@
 # Customer-Retention-Analytics
 This is a business analytics case study that applies logistic regression and machine learning to improve subscription retention.  
 
-📌 **Problem Statement**  
+**Problem Statement**  
 Ted & Poppy, a subscription-based pet food company, faced a **15.8% churn rate in Q4 2024**.  
 The challenge was to identify key churn drivers and design data-driven retention strategies.  
 
@@ -11,13 +11,13 @@ Key questions addressed:
 - How can predictive models support proactive retention campaigns?  
 - What strategies can improve customer loyalty and lifetime value?  
 ---
-🛠 **Tech Stack**  
+**Tech Stack**  
 - **Data & Storage:** Synthetic subscription dataset (200,000 customers, Oct–Dec 2024)  
 - **Analysis/Modeling:** R (Logistic Regression, Random Forest, LightGBM)  
 - **Visualization:** Poster PDF  
 - **Validation:** 10-fold cross-validation, ROC analysis  
 ---
-📂 **Workflow**  
+**Workflow**  
 - **Data Preparation:** Cleaning, standardization, variable selection (28 features)  
 - **Exploratory Analysis:** Churn distribution, customer purchase patterns, discount usage, support tickets  
 - **Modeling:**  
@@ -27,13 +27,13 @@ Key questions addressed:
 - **Model Comparison:** Accuracy, Sensitivity, Specificity, ROC (up to 0.92)  
 - **Interpretation:** Feature importance & churn factor insights  
 ---
-📊 **Key Insights**  
+**Key Insights**  
 - Customers with **longer gaps since last purchase** are more likely to churn.  
 - Those who **raised support tickets in the past 6 months** had higher churn risk.  
 - **Browser type matters**: Chrome/Firefox users showed lower churn.  
 - **Discounts help retention**: Customers without offers churned more.  
 ---
-💡 **Recommendations**  
+**Recommendations**  
 - Strengthen customer support (faster response, chatbots, proactive outreach).  
 - Optimize digital experience (browser compatibility, smoother UX).  
 - Targeted promotions (loyalty rewards, referral discounts, renewal offers).  
@@ -45,6 +45,6 @@ The full analysis is implemented in Quarto:
   Contains data preparation and model training, evaluation.
 ---
 **Results Poster**
-📄 See the full poster summarizing the findings:  
+See the full poster summarizing the findings:  
 [View Poster (PDF)](Customer-Retention-Poster.pdf)
 
